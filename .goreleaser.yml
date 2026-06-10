@@ -1,0 +1,63 @@
+version: 2
+
+project_name: mc-fleet
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: mc-fleet
+    main: ./cmd/mc-fleet
+    binary: mc-fleet
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64   # opt out — most Windows machines are amd64; can add later
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+
+  - id: meappy-mc
+    main: ./cmd/meappy-mc
+    binary: meappy-mc
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+  # Also publish the raw binaries (uncompressed) so install scripts can curl
+  # them directly without untarring.
+  - id: binaries
+    format: binary
+    name_template: "{{ .Binary }}-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
