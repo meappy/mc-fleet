@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/meappy/mc-fleet/internal/launcher"
@@ -147,6 +148,75 @@ func reconcileProfile(m launcher.Machine, profile, mcVersion, loader string,
 		}
 		if err := os.WriteFile(sentinel, []byte(info.VersionNumber), 0o644); err != nil {
 			return fmt.Errorf("write sentinel %s: %w", sentinel, err)
+		}
+	}
+
+	if opts.Clean {
+		if err := pruneUnknown(modsDir, resolved, opts.DryRun); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pruneUnknown deletes jars in modsDir that the spec no longer lists, along
+// with their version sentinels and any sentinel orphaned by a jar that has
+// already gone.
+//
+// This is the other half of "diff against disk + apply" and it was missing:
+// Opts.Clean existed and was documented, but nothing ever read it, so a mod
+// dropped from the spec stayed on every Mac for ever. That is not cosmetic.
+// xaero-zoomout was removed from the spec *because it crash-loops the client*;
+// because nothing deleted it, it sat on a Mac for 11 days and then red-screened
+// it — its mixin no longer matches Xaero's Minimap 26.5.0, so the minimap
+// cannot construct and mod loading aborts. Stale clockwork_mod + knight-lib
+// jars locked a player out of the dragons server entirely ("Channel
+// [clockwork:main] missing on the server side, but required on the client!"),
+// and a renamed Modrinth slug leaves both halves of the same mod installed at
+// once.
+//
+// Only *.jar and .*.version entries are considered. Anything else in the
+// folder — subdirectories, shaderpacks, stray notes — is left untouched, and a
+// jar is only ever removed when the resolve step above succeeded for every
+// mod, so a failed lookup can never be mistaken for "no longer in the spec".
+func pruneUnknown(modsDir string, resolved []*resolve.ModInfo, dryRun bool) error {
+	keepJar := make(map[string]bool, len(resolved))
+	keepSentinel := make(map[string]bool, len(resolved))
+	for _, info := range resolved {
+		keepJar[info.Slug+".jar"] = true
+		keepSentinel["."+info.Slug+".version"] = true
+	}
+
+	entries, err := os.ReadDir(modsDir)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", modsDir, err)
+	}
+
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		isJar := filepath.Ext(name) == ".jar"
+		isSentinel := strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".version")
+		if !isJar && !isSentinel {
+			continue
+		}
+		if isJar && keepJar[name] {
+			continue
+		}
+		if isSentinel && keepSentinel[name] {
+			continue
+		}
+		if dryRun {
+			notify.Progress(fmt.Sprintf("  would remove %s", name))
+			continue
+		}
+		if isJar {
+			notify.Progress(fmt.Sprintf("  removing %s (not in spec)", name))
+		}
+		if err := os.Remove(filepath.Join(modsDir, name)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove %s: %w", name, err)
 		}
 	}
 	return nil

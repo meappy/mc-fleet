@@ -31,7 +31,7 @@ func main() {
 	}
 
 	m := launcher.LocalMachine("")
-	if err := reconcile.Run(s, m, reconcile.Opts{}); err != nil {
+	if err := reconcile.Run(s, m, reconcile.Opts{Clean: true}); err != nil {
 		notify.Error(fmt.Sprintf("sync failed: %v", err))
 		os.Exit(1)
 	}

@@ -23,10 +23,10 @@ const defaultRemote = "https://minecraft.meappy.me/fleet-spec.json"
 
 func main() {
 	root := &cobra.Command{
-		Use:           "mc-fleet",
-		Short:         "Sync Minecraft mods against a published spec; launch the game.",
-		SilenceUsage:  true,
-		Version:       Version,
+		Use:          "mc-fleet",
+		Short:        "Sync Minecraft mods against a published spec; launch the game.",
+		SilenceUsage: true,
+		Version:      Version,
 	}
 
 	root.AddCommand(newSyncCmd())
@@ -46,6 +46,7 @@ func newSyncCmd() *cobra.Command {
 		specPath   string
 		machineKey string
 		dryRun     bool
+		clean      bool
 	)
 	cmd := &cobra.Command{
 		Use:   "sync",
@@ -56,13 +57,14 @@ func newSyncCmd() *cobra.Command {
 				return err
 			}
 			m := launcher.LocalMachine(machineKey)
-			return reconcile.Run(s, m, reconcile.Opts{DryRun: dryRun})
+			return reconcile.Run(s, m, reconcile.Opts{DryRun: dryRun, Clean: clean})
 		},
 	}
 	cmd.Flags().StringVar(&remote, "remote", defaultRemote, "URL to fetch fleet-spec.json from")
 	cmd.Flags().StringVar(&specPath, "spec", "", "local path to fleet-spec.json (overrides --remote)")
 	cmd.Flags().StringVar(&machineKey, "machine", "", "machine name (defaults to hostname or 'local')")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print actions without writing")
+	cmd.Flags().BoolVar(&clean, "clean", true, "delete jars that are not in the spec")
 	return cmd
 }
 
@@ -79,10 +81,11 @@ func newLaunchCmd() *cobra.Command {
 
 func newApplyCmd() *cobra.Command {
 	var (
-		remote     string
-		specPath   string
-		machineKey string
-		dryRun     bool
+		remote      string
+		specPath    string
+		machineKey  string
+		dryRun      bool
+		clean       bool
 		launchAfter bool
 	)
 	cmd := &cobra.Command{
@@ -94,7 +97,7 @@ func newApplyCmd() *cobra.Command {
 				return err
 			}
 			m := launcher.LocalMachine(machineKey)
-			if err := reconcile.Run(s, m, reconcile.Opts{DryRun: dryRun}); err != nil {
+			if err := reconcile.Run(s, m, reconcile.Opts{DryRun: dryRun, Clean: clean}); err != nil {
 				return err
 			}
 			if launchAfter && !dryRun {
@@ -107,6 +110,7 @@ func newApplyCmd() *cobra.Command {
 	cmd.Flags().StringVar(&specPath, "spec", "", "local path to fleet-spec.json (overrides --remote)")
 	cmd.Flags().StringVar(&machineKey, "machine", "", "machine name (defaults to hostname or 'local')")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "print actions without writing")
+	cmd.Flags().BoolVar(&clean, "clean", true, "delete jars that are not in the spec")
 	cmd.Flags().BoolVar(&launchAfter, "launch", true, "launch Minecraft after the sync succeeds")
 	return cmd
 }
